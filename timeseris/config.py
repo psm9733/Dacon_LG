@@ -1,0 +1,13 @@
+WEIGHT_DECAY = 1e-5
+LR_DECAY_LATE = 0.1
+INPUT_SHAPE = (10, 1)
+NUM_CLASSES = 4
+LR = 1e-3
+EPS = 1e-7
+WARMUP_EPOCHS = 10
+EPOCHS = 200
+BATCH_SIZE = 128
+TRAIN_DIR_PATH = "C:/Users/sangmin/Desktop/Dacon_LG/dataset/sample_data/"
+VALID_DIR_PATH = "C:/Users/sangmin/Desktop/Dacon_LG/dataset/sample_data/"
+img_format = ".jpg"
+save_dir = "./saved_models/"
