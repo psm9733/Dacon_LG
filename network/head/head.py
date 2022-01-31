@@ -17,8 +17,8 @@ def MultiScale_Classification_HEAD(in_tensor_list, activation, num_classes, weig
     out_tensor_list = []
     for index, in_tensor in enumerate(in_tensor_list):
         b, w, h, c = in_tensor.shape
-        out_tensor = Conv2dBnAct(in_tensor, int(c), (3, 3), (1, 1), activation=activation, weight_decay=weight_decay)
-        out_tensor = Conv2dBnAct(out_tensor, int(c / 2), (3, 3), (1, 1), activation=activation, weight_decay=weight_decay)
+        out_tensor = Conv2dBnAct(in_tensor, c, (3, 3), (1, 1), activation=activation, weight_decay=weight_decay)
+        out_tensor = Conv2dBnAct(out_tensor, c, (3, 3), (1, 1), activation=activation, weight_decay=weight_decay)
         out_tensor = tf.keras.layers.GlobalAveragePooling2D()(out_tensor)
         out_tensor = tf.keras.layers.Reshape((1, 1, -1))(out_tensor)
         b, w, h, c = out_tensor.shape

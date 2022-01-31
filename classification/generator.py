@@ -24,13 +24,11 @@ class MultiTask_Generator(tf.keras.utils.Sequence):
 
     def get_dataset(self, dataset_info_path):
         img_list = glob.glob(dataset_info_path + "/**/*.jpg", recursive=True)
-        if self.is_train == False:
-            img_list = img_list[:int(len(img_list) * 0.2)]
         new_img_list = []
         for img in img_list:
             img = img.replace("\\", "/")
             new_img_list.append(img)
-        return new_img_list[:128]
+        return new_img_list
 
     def on_epoch_end(self):
         self.indexes = np.arange(len(self.data))
@@ -63,7 +61,6 @@ class MultiTask_Generator(tf.keras.utils.Sequence):
         total_list = []
         for img_path in data:
             img = cv2.imread(img_path)
-            img = cv2.resize(img, (self.input_shape[0], self.input_shape[1]))
             img_list.append(img)
             json_path = img_path.replace(img_format, ".json")
             with open(json_path, "r") as file:

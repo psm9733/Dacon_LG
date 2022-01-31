@@ -4,15 +4,22 @@ import datetime
 import os
 import albumentations
 import sys
-from classification.config import *
+import numpy as np
+import random as rn
+from config import *
 from network.common.blocks import StemBlock
 from network.backbone.regnet.regnet import RegNetY, RegNetZ
 from network.neck.neck import FPN
 from network.head.head import Classification_Head, MultiScale_Classification_HEAD, MultiScale_Regression_HEAD
-from classification.generator import MultiTask_Generator
+from generator import MultiTask_Generator
 from utils.logger import Logger
 from utils.scheduler import CosineAnnealingLRScheduler
 from tensorflow_addons.optimizers import RectifiedAdam
+
+seed_num = 852
+tf.random.set_seed(seed_num)
+np.random.seed(seed_num)
+rn.seed(seed_num)
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
@@ -100,9 +107,9 @@ if __name__ == '__main__':
             albumentations.RandomBrightness(),
             albumentations.Affine(),
             albumentations.RandomContrast(),
-            albumentations.Solarize(),
-            albumentations.ColorJitter(),
-        ], 3, p=0.5),
+            # albumentations.Solarize(),
+            # albumentations.ColorJitter(),
+        ], 2, p=0.5),
         albumentations.Flip(p=0.5),
     ])
 
@@ -137,7 +144,7 @@ if __name__ == '__main__':
 
     callbacks = [
         tf.keras.callbacks.ModelCheckpoint(filepath=save_dir + '/' + model_name + '_epoch={epoch:05d}.h5',
-                                                    monitor='val_loss',
+                                                    monitor='Head_total_loss',
                                                     save_best_only=True,
                                                     save_weights_only=False,
                                                     verbose=1,
@@ -148,10 +155,10 @@ if __name__ == '__main__':
     ]
 
     model.fit_generator(train_batch_gen,
-                        use_multiprocessing=False,
+                        use_multiprocessing=True,
                         max_queue_size=20,
                         callbacks=callbacks,
-                        workers=1,
+                        workers=4,
                         epochs=EPOCHS,
-                        validation_data=valid_batch_gen
+                        # validation_data=valid_batch_gen
 )
