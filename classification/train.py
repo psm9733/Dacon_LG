@@ -10,7 +10,7 @@ from config import *
 from network.common.blocks import StemBlock
 from network.backbone.regnet.regnet import RegNetY, RegNetZ
 from network.neck.neck import FPN
-from network.head.head import Classification_Head, MultiScale_Classification_HEAD, MultiScale_Regression_HEAD
+from network.head.head import Classification_Head, MultiScale_Classification_HEAD, MultiScale_Segmentation_HEAD
 from generator import MultiTask_Generator
 from utils.logger import Logger
 from utils.scheduler import CosineAnnealingLRScheduler
@@ -42,22 +42,21 @@ def Model(in_shape, num_classes_list, n_block_per_stage, filter_per_stage, kerne
         weight_decay
     )
 
-    fpn_area = FPN(backbone, activation, weight_decay, "add")
-    head_area = MultiScale_Classification_HEAD(fpn_area, activation, num_classes_list[0], weight_decay, "area")
+    fpn = FPN(backbone, activation, weight_decay, "add")
 
-    fpn_crop = FPN(backbone, activation, weight_decay, "add")
-    head_crop = MultiScale_Classification_HEAD(fpn_crop, activation, num_classes_list[1], weight_decay, "crop")
+    head_seg_0, head_seg_1, head_seg_2 = MultiScale_Segmentation_HEAD(fpn, activation, weight_decay, "seg")
 
-    fpn_disease = FPN(backbone, activation, weight_decay, "add")
-    head_disease = MultiScale_Classification_HEAD(fpn_disease, activation, num_classes_list[2], weight_decay, "disease")
+    head_area = MultiScale_Classification_HEAD(fpn, activation, num_classes_list[0], weight_decay, "area")
 
-    fpn_risk = FPN(backbone, activation, weight_decay, "add")
-    head_risk = MultiScale_Classification_HEAD(fpn_risk, activation, num_classes_list[3], weight_decay, "risk")
+    head_crop = MultiScale_Classification_HEAD(fpn, activation, num_classes_list[1], weight_decay, "crop")
 
-    fpn_total = FPN(backbone, activation, weight_decay, "add")
-    head_total = MultiScale_Classification_HEAD(fpn_total, activation, num_classes_list[4], weight_decay, "total")
+    head_disease = MultiScale_Classification_HEAD(fpn, activation, num_classes_list[2], weight_decay, "disease")
 
-    model = tf.keras.Model(inputs=[input_tensor], outputs=[head_area, head_crop, head_disease, head_risk, head_total])
+    head_risk = MultiScale_Classification_HEAD(fpn, activation, num_classes_list[3], weight_decay, "risk")
+
+    head_total = MultiScale_Classification_HEAD(fpn, activation, num_classes_list[4], weight_decay, "total")
+
+    model = tf.keras.Model(inputs=[input_tensor], outputs=[head_seg_0, head_seg_1, head_seg_2, head_area, head_crop, head_disease, head_risk, head_total])
     return model
 
 
@@ -127,6 +126,9 @@ if __name__ == '__main__':
     model.compile(
         optimizer=RectifiedAdam(LR),
         loss={
+            "Head_seg_0": tf.keras.losses.MSE,
+            "Head_seg_1": tf.keras.losses.MSE,
+            "Head_seg_2": tf.keras.losses.MSE,
             "Head_area": tf.keras.losses.categorical_crossentropy,
             "Head_crop": tf.keras.losses.categorical_crossentropy,
             "Head_disease": tf.keras.losses.categorical_crossentropy,

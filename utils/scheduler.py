@@ -20,15 +20,12 @@ class CosineAnnealingLRScheduler(tf.keras.callbacks.Callback):
             lr = self.init_lr * math.sin((math.pi / 2) * remains / self.warmup_epoch)
         elif epoch >= self.warmup_epoch:
             cycles_index = (epoch // self.epoch_per_cycle)
+            remains = (epoch % self.epoch_per_cycle)
+            if remains == 0:
+                self.init_lr = self.init_lr * math.pow((1 - self.lr_decay_rate), cycles_index)
             if cycles_index == 0:
-                remains = (epoch % (self.epoch_per_cycle - self.warmup_epoch))
-                if remains == 0:
-                    self.init_lr = self.init_lr * math.pow((1 - self.lr_decay_rate), cycles_index)
-                lr = self.init_lr * math.cos((math.pi / 2) * remains / (self.epoch_per_cycle - self.warmup_epoch))
+                lr = self.init_lr * math.cos((math.pi / 2) * (remains - self.warmup_epoch) / (self.epoch_per_cycle - self.warmup_epoch))
             else:
-                remains = (epoch % self.epoch_per_cycle)
-                if remains == 0:
-                    self.init_lr = self.init_lr * math.pow((1 - self.lr_decay_rate), cycles_index)
                 lr = self.init_lr * math.cos((math.pi / 2) * remains / self.epoch_per_cycle)
         backend.set_value(self.model.optimizer.lr, lr)
         self.lr_history.append(lr)
