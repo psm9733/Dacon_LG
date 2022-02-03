@@ -63,6 +63,7 @@ class TimeSerisGenerator(tf.keras.utils.Sequence):
             csv_max[0] = self.toTimestamp(csv_max[0])
             csv_min[0] = self.toTimestamp(csv_min[0])
             gt = np.array([csv_max, csv_min])
+            print(gt.shape)
 
         return batch_features, batch_gt
 

@@ -5,6 +5,9 @@ import numpy as np
 import cv2
 import glob
 import json
+import pandas as pd
+import time
+from datetime import datetime
 import albumentations
 from classification.config import *
 
@@ -12,6 +15,8 @@ from classification.config import *
 class MultiTask_Generator(tf.keras.utils.Sequence):
     def __init__(self, dataset_info_path, batch_size, input_shape, num_classes_list, augs, is_train=True,
                  label_smooting=False, output_stride=[32, 16, 8]):
+        self.csv_features = ['측정시각', '내부 온도 1 평균', '내부 온도 1 최고', '내부 온도 1 최저', '내부 습도 1 평균', '내부 습도 1 최고',
+                        '내부 습도 1 최저', '내부 이슬점 평균', '내부 이슬점 최고', '내부 이슬점 최저']
         self.dataset_info_path = dataset_info_path
         self.batch_size = batch_size
         self.input_shape = input_shape
@@ -65,17 +70,22 @@ class MultiTask_Generator(tf.keras.utils.Sequence):
         heatmap[heatmap < EPS] = 0
         return heatmap
 
+    def toTimestamp(self, time_info):
+        time_info = time_info.replace('2021', '1970')
+        return time.mktime(datetime.strptime(time_info, '%Y-%m-%d %H:%M:%S').timetuple())
+
     def __data_gen(self, data):
         cv2.setNumThreads(0)
         batch_img = np.zeros(shape=(self.batch_size, self.input_shape[0], self.input_shape[1], self.input_shape[2]),
                              dtype=np.float32)
-        batch_seg_0 = np.zeros(shape=(self.batch_size, int(self.input_shape[0] / self.output_stride[0]), int(self.input_shape[1] / self.output_stride[0])), dtype=np.float32)
-        batch_seg_1 = np.zeros(shape=(self.batch_size, int(self.input_shape[0] / self.output_stride[1]), int(self.input_shape[1] / self.output_stride[1])), dtype=np.float32)
-        batch_seg_2 = np.zeros(shape=(self.batch_size, int(self.input_shape[0] / self.output_stride[2]), int(self.input_shape[1] / self.output_stride[2])), dtype=np.float32)
+        # batch_seg_0 = np.zeros(shape=(self.batch_size, int(self.input_shape[0] / self.output_stride[0]), int(self.input_shape[1] / self.output_stride[0])), dtype=np.float32)
+        # batch_seg_1 = np.zeros(shape=(self.batch_size, int(self.input_shape[0] / self.output_stride[1]), int(self.input_shape[1] / self.output_stride[1])), dtype=np.float32)
+        # batch_seg_2 = np.zeros(shape=(self.batch_size, int(self.input_shape[0] / self.output_stride[2]), int(self.input_shape[1] / self.output_stride[2])), dtype=np.float32)
         batch_area = np.zeros(shape=(self.batch_size, self.num_classes_list[0]), dtype=np.float32)
         batch_crop = np.zeros(shape=(self.batch_size, self.num_classes_list[1]), dtype=np.float32)
         batch_disease = np.zeros(shape=(self.batch_size, self.num_classes_list[2]), dtype=np.float32)
         batch_risk = np.zeros(shape=(self.batch_size, self.num_classes_list[3]), dtype=np.float32)
+        batch_embedding = np.zeros(shape=(self.batch_size, 20), dtype=np.float32)
         batch_total = np.zeros(shape=(self.batch_size, self.num_classes_list[4]), dtype=np.float32)
         img_list = []
         area_list = []
@@ -107,38 +117,51 @@ class MultiTask_Generator(tf.keras.utils.Sequence):
         for i in range(len(data)):
             img = cv2.imread(data[i])
             # origin = img.copy()
-            img_shape = img.shape
+            # img_shape = img.shape
             # img = cv2.resize(img, (self.input_shape[1], self.input_shape[0]))
             img = self.augs(image=img)['image'] / 255.
-            resize_shape = img.shape
+
+            csv_path = data[i].replace(".jpg", ".csv")
+            csv = pd.read_csv(csv_path)[self.csv_features]
+            csv = csv.replace("-", np.nan).dropna()
+            if len(csv) == 0:
+                continue
+            csv_max = csv.max().to_numpy()
+            csv_min = csv.min().to_numpy()
+            csv_max[0] = pd.to_datetime(csv_max[0]).month
+            csv_min[0] = pd.to_datetime(csv_min[0]).month
+            gt = np.concatenate((csv_min, csv_max))
+
+
             area = tf.keras.utils.to_categorical((area_list[i] - 1), num_classes=self.num_classes_list[0])
             crop = tf.keras.utils.to_categorical((crop_list[i] - 1), num_classes=self.num_classes_list[1])
             disease = tf.keras.utils.to_categorical(disease_dict.get(disease_list[i]),
                                                     num_classes=self.num_classes_list[2])
-            w_ratio = resize_shape[1] / img_shape[1]
-            h_ratio = resize_shape[0] / img_shape[0]
-            for bboxes in bbox_list:
-                for bbox in bboxes:
-                    w = int(bbox['w'] * w_ratio)
-                    h = int(bbox['h'] * h_ratio)
-                    cx = int((bbox['x'] + w / 2) * w_ratio)
-                    cy = int((bbox['y'] + h / 2) * h_ratio)
-                    # origin = cv2.rectangle(origin, (int(bbox['x']), int(bbox['y'])) , (int(bbox['x'] + bbox['w']), int(bbox['y'] + bbox['h'])), (0, 255, 0), 1)
-                    batch_seg_0[i] = self.get_gaussian_epllipse_heatmap(batch_seg_0[i],
-                                                                     int(cx / self.output_stride[0]),
-                                                                     int(cy / self.output_stride[0]),
-                                                                     int(w / self.output_stride[0]),
-                                                                     int(h / self.output_stride[0]))
-                    batch_seg_1[i] = self.get_gaussian_epllipse_heatmap(batch_seg_1[i],
-                                                                     int(cx / self.output_stride[1]),
-                                                                     int(cy / self.output_stride[1]),
-                                                                     int(w / self.output_stride[1]),
-                                                                     int(h / self.output_stride[1]))
-                    batch_seg_2[i] = self.get_gaussian_epllipse_heatmap(batch_seg_2[i],
-                                                                     int(cx / self.output_stride[2]),
-                                                                     int(cy / self.output_stride[2]),
-                                                                     int(w / self.output_stride[2]),
-                                                                     int(h / self.output_stride[2]))
+            # resize_shape = img.shape
+            # w_ratio = resize_shape[1] / img_shape[1]
+            # h_ratio = resize_shape[0] / img_shape[0]
+            # for bboxes in bbox_list:
+            #     for bbox in bboxes:
+            #         w = int(bbox['w'] * w_ratio)
+            #         h = int(bbox['h'] * h_ratio)
+            #         cx = int((bbox['x'] + w / 2) * w_ratio)
+            #         cy = int((bbox['y'] + h / 2) * h_ratio)
+            #         # origin = cv2.rectangle(origin, (int(bbox['x']), int(bbox['y'])) , (int(bbox['x'] + bbox['w']), int(bbox['y'] + bbox['h'])), (0, 255, 0), 1)
+            #         batch_seg_0[i] = self.get_gaussian_epllipse_heatmap(batch_seg_0[i],
+            #                                                          int(cx / self.output_stride[0]),
+            #                                                          int(cy / self.output_stride[0]),
+            #                                                          int(w / self.output_stride[0]),
+            #                                                          int(h / self.output_stride[0]))
+            #         batch_seg_1[i] = self.get_gaussian_epllipse_heatmap(batch_seg_1[i],
+            #                                                          int(cx / self.output_stride[1]),
+            #                                                          int(cy / self.output_stride[1]),
+            #                                                          int(w / self.output_stride[1]),
+            #                                                          int(h / self.output_stride[1]))
+            #         batch_seg_2[i] = self.get_gaussian_epllipse_heatmap(batch_seg_2[i],
+            #                                                          int(cx / self.output_stride[2]),
+            #                                                          int(cy / self.output_stride[2]),
+            #                                                          int(w / self.output_stride[2]),
+            #                                                          int(h / self.output_stride[2]))
             # cv2.imshow("batch_seg_0[i]", batch_seg_0[i])
             # cv2.imshow("batch_seg_1[i]", batch_seg_1[i])
             # cv2.imshow("batch_seg_2[i]", batch_seg_2[i])
@@ -152,9 +175,11 @@ class MultiTask_Generator(tf.keras.utils.Sequence):
             batch_crop[i] = crop
             batch_disease[i] = disease
             batch_risk[i] = risk
+            batch_embedding[i] = gt
             batch_total[i] = total
-        return batch_img, [np.expand_dims(batch_seg_0, -1), np.expand_dims(batch_seg_1, -1), np.expand_dims(batch_seg_2, -1), batch_area, batch_crop, batch_disease, batch_risk,
-                           batch_total]
+        return [batch_img, batch_embedding], [batch_area, batch_crop, batch_disease, batch_risk, batch_total]
+        # return batch_img, [np.expand_dims(batch_seg_0, -1), np.expand_dims(batch_seg_1, -1), np.expand_dims(batch_seg_2, -1), batch_area, batch_crop, batch_disease, batch_risk,
+        #                    batch_total]
 
 
 if __name__ == "__main__":

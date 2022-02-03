@@ -25,10 +25,12 @@ os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 
-def Model(in_shape, num_classes_list, n_block_per_stage, filter_per_stage, kernel_size_per_stage,
+def Model(cnn_shape, embedding_length, num_classes_list, n_block_per_stage, filter_per_stage, kernel_size_per_stage,
           strides_per_stage, groups_per_stage, activation,
           weight_decay):
-    input_tensor = tf.keras.layers.Input(in_shape)
+    kernel_regularizer = tf.keras.regularizers.l2(weight_decay)
+    input_tensor = tf.keras.layers.Input(cnn_shape)
+    embed_tensor = tf.keras.layers.Input(shape=(embedding_length))
     stem = StemBlock(input_tensor, [32, 16, 32], [(3, 3), (3, 3), (1, 1)], [(2, 2), (2, 2), (1, 1)], activation,
                      weight_decay)
     backbone = RegNetZ(
@@ -44,7 +46,7 @@ def Model(in_shape, num_classes_list, n_block_per_stage, filter_per_stage, kerne
 
     fpn = FPN(backbone, activation, weight_decay, "add")
 
-    head_seg_0, head_seg_1, head_seg_2 = MultiScale_Segmentation_HEAD(fpn, activation, weight_decay, "seg")
+    # head_seg_0, head_seg_1, head_seg_2 = MultiScale_Segmentation_HEAD(fpn, activation, weight_decay, "seg")
 
     head_area = MultiScale_Classification_HEAD(fpn, activation, num_classes_list[0], weight_decay, "area")
 
@@ -54,9 +56,20 @@ def Model(in_shape, num_classes_list, n_block_per_stage, filter_per_stage, kerne
 
     head_risk = MultiScale_Classification_HEAD(fpn, activation, num_classes_list[3], weight_decay, "risk")
 
-    head_total = MultiScale_Classification_HEAD(fpn, activation, num_classes_list[4], weight_decay, "total")
+    cnn_concat = tf.keras.layers.Concatenate()([head_area, head_crop, head_disease, head_risk])
 
-    model = tf.keras.Model(inputs=[input_tensor], outputs=[head_seg_0, head_seg_1, head_seg_2, head_area, head_crop, head_disease, head_risk, head_total])
+    head_env = tf.keras.layers.Dense(cnn_concat.shape[-1])(embed_tensor)
+    concat_tensor = tf.keras.layers.Concatenate()([cnn_concat, head_env])
+    concat_tensor = tf.keras.layers.Reshape((1, -1))(concat_tensor)
+    lstm_tensor = tf.keras.layers.LSTM(concat_tensor.shape[-1], activation=activation, return_sequences=True, kernel_regularizer=kernel_regularizer)(concat_tensor)
+
+    total_concat_tensor = tf.keras.layers.Concatenate()([concat_tensor, lstm_tensor])
+    total_concat_tensor = tf.keras.layers.Reshape((-1, ))(total_concat_tensor)
+
+    head_total = tf.keras.layers.Dense(total_concat_tensor.shape[-1], activation=activation, kernel_regularizer=kernel_regularizer)(total_concat_tensor)
+    head_total = tf.keras.layers.Dense(num_classes_list[4], activation="softmax", kernel_regularizer=kernel_regularizer, name="Head_total")(head_total)
+    # head_total = MultiScale_Classification_HEAD(fpn, activation, num_classes_list[4], weight_decay, "total")
+    model = tf.keras.Model(inputs=[input_tensor, embed_tensor], outputs=[head_area, head_crop, head_disease, head_risk, head_total])
     return model
 
 
@@ -80,7 +93,7 @@ if __name__ == '__main__':
 
     lr_logger = Logger(log_dir + "/lr/" + model_name)
     activation = tf.keras.layers.Activation(tf.nn.relu)
-    model = Model(INPUT_SHAPE,
+    model = Model(INPUT_SHAPE, EMBEDDING_SHAPE,
                             num_classes_list,
                             [1, 1, 1],
                             [[128, 128, 128], [256, 256, 256], [512, 512, 512]],
@@ -126,9 +139,9 @@ if __name__ == '__main__':
     model.compile(
         optimizer=RectifiedAdam(LR),
         loss={
-            "Head_seg_0": tf.keras.losses.MSE,
-            "Head_seg_1": tf.keras.losses.MSE,
-            "Head_seg_2": tf.keras.losses.MSE,
+            # "Head_seg_0": tf.keras.losses.MSE,
+            # "Head_seg_1": tf.keras.losses.MSE,
+            # "Head_seg_2": tf.keras.losses.MSE,
             "Head_area": tf.keras.losses.categorical_crossentropy,
             "Head_crop": tf.keras.losses.categorical_crossentropy,
             "Head_disease": tf.keras.losses.categorical_crossentropy,
