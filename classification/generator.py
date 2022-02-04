@@ -35,6 +35,21 @@ class MultiTask_Generator(tf.keras.utils.Sequence):
         for img in img_list:
             img = img.replace("\\", "/")
             new_img_list.append(img)
+        temp_csv = pd.read_csv(new_img_list[0].replace(".jpg", ".csv"))[self.csv_features[1:]]
+        max_arr, min_arr = temp_csv.max().to_numpy(), temp_csv.min().to_numpy()
+        for img_path in tqdm.tqdm(new_img_list[1:]):
+            csv = img_path.replace(".jpg", ".csv")
+            temp_csv = pd.read_csv(csv)[self.csv_features[1:]]
+            temp_csv = temp_csv.replace('-', np.nan).dropna()
+            if len(temp_csv) == 0:
+                continue
+            temp_csv = temp_csv.astype(float)
+            temp_max, temp_min = temp_csv.max().to_numpy(), temp_csv.min().to_numpy()
+            max_arr = np.max([max_arr, temp_max], axis=0)
+            min_arr = np.min([min_arr, temp_min], axis=0)
+
+        # feature 별 최대값, 최솟값 dictionary 생성
+        self.csv_feature_dict = {self.csv_features[i+1]: [min_arr[i], max_arr[i]] for i in range(len(self.csv_features[1:]))}
         return new_img_list
 
     def on_epoch_end(self):
@@ -85,7 +100,7 @@ class MultiTask_Generator(tf.keras.utils.Sequence):
         batch_crop = np.zeros(shape=(self.batch_size, self.num_classes_list[1]), dtype=np.float32)
         batch_disease = np.zeros(shape=(self.batch_size, self.num_classes_list[2]), dtype=np.float32)
         batch_risk = np.zeros(shape=(self.batch_size, self.num_classes_list[3]), dtype=np.float32)
-        batch_embedding = np.zeros(shape=(self.batch_size, 20), dtype=np.float32)
+        batch_embedding = np.zeros(shape=(self.batch_size, EMBEDDING_LENGTH), dtype=np.float32)
         batch_total = np.zeros(shape=(self.batch_size, self.num_classes_list[4]), dtype=np.float32)
         img_list = []
         area_list = []
@@ -117,21 +132,23 @@ class MultiTask_Generator(tf.keras.utils.Sequence):
         for i in range(len(data)):
             img = cv2.imread(data[i])
             # origin = img.copy()
-            # img_shape = img.shape
+            img_shape = img.shape
             # img = cv2.resize(img, (self.input_shape[1], self.input_shape[0]))
             img = self.augs(image=img)['image'] / 255.
 
             csv_path = data[i].replace(".jpg", ".csv")
             csv = pd.read_csv(csv_path)[self.csv_features]
-            csv = csv.replace("-", np.nan).dropna()
+            csv = csv.replace('-', 0)
+            for col in csv.columns[1:]:
+                csv[col] = csv[col].astype(float) - self.csv_feature_dict[col][0]
+                csv[col] = csv[col] / (self.csv_feature_dict[col][1]-self.csv_feature_dict[col][0])
             if len(csv) == 0:
                 continue
             csv_max = csv.max().to_numpy()
             csv_min = csv.min().to_numpy()
-            csv_max[0] = pd.to_datetime(csv_max[0]).month
-            csv_min[0] = pd.to_datetime(csv_min[0]).month
+            csv_max[0] = pd.to_datetime(csv_max[0]).month / 12
+            csv_min[0] = pd.to_datetime(csv_min[0]).month / 12
             gt = np.concatenate((csv_min, csv_max))
-
 
             area = tf.keras.utils.to_categorical((area_list[i] - 1), num_classes=self.num_classes_list[0])
             crop = tf.keras.utils.to_categorical((crop_list[i] - 1), num_classes=self.num_classes_list[1])
@@ -178,7 +195,7 @@ class MultiTask_Generator(tf.keras.utils.Sequence):
             batch_embedding[i] = gt
             batch_total[i] = total
         return [batch_img, batch_embedding], [batch_area, batch_crop, batch_disease, batch_risk, batch_total]
-        # return batch_img, [np.expand_dims(batch_seg_0, -1), np.expand_dims(batch_seg_1, -1), np.expand_dims(batch_seg_2, -1), batch_area, batch_crop, batch_disease, batch_risk,
+        # return [batch_img, batch_embedding], [np.expand_dims(batch_seg_0, -1), np.expand_dims(batch_seg_1, -1), np.expand_dims(batch_seg_2, -1), batch_area, batch_crop, batch_disease, batch_risk,
         #                    batch_total]
 
 

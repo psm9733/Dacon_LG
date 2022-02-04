@@ -1,16 +1,16 @@
 WEIGHT_DECAY = 1e-5
 num_classes_list = [5, 6, 21, 4, 25]
 LR_DECAY_LATE = 0.1
-INPUT_SHAPE = (352, 352, 3)
-EMBEDDING_SHAPE = 20
+INPUT_SHAPE = (416, 416, 3)
+EMBEDDING_LENGTH = 20
 LR = 5e-4
 EPS = 1e-7
 WARMUP_EPOCHS = 10
 EPOCHS = 400
-BATCH_SIZE = 16
+BATCH_SIZE = 64
 N_CYCLES = 4
-TRAIN_PATH = "C:/Users/sangmin/Desktop/Dacon_LG/dataset/data/train"
-VALID_PATH = "C:/Users/sangmin/Desktop/Dacon_LG/dataset/data/train"
+TRAIN_PATH = "/home/fssv1/sangmin/Dacon_LG/dataset/data/train"
+VALID_PATH = "/home/fssv1/sangmin/Dacon_LG/dataset/data/train"
 img_format = ".jpg"
 save_dir = "./saved_models/"
 

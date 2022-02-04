@@ -42,7 +42,7 @@ def MultiScale_Classification_HEAD(in_tensor_list, activation, num_classes, weig
     out_tensor = tf.keras.layers.Concatenate()(out_tensor_list)
     out_tensor = tf.keras.layers.Dropout(0.2)(out_tensor)
     out_tensor = tf.keras.layers.Conv2D(filters=num_classes, kernel_size=(1, 1), strides=(1, 1),
-                                        kernel_regularizer=kernel_regularizer, activation='softmax')(out_tensor)
+                                        kernel_regularizer=kernel_regularizer, activation='sigmoid')(out_tensor)
     out_tensor = tf.keras.layers.Reshape((-1,), name="Head_{}".format(name))(out_tensor)
     return out_tensor
 
